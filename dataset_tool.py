@@ -207,7 +207,8 @@ def display(tfrecord_dir):
             cv2.namedWindow('dataset_tool')
             print('Press SPACE or ENTER to advance, ESC to exit')
         print('\nidx = %-8d\nlabel = %s' % (idx, labels[0].tolist()))
-        cv2.imshow('dataset_tool', images[0].transpose(1, 2, 0)[:, :, ::-1]) # CHW => HWC, RGB => BGR
+        image = np.squeeze(images[0].transpose(1, 2, 0)[:, :, ::-1])
+        cv2.imshow('dataset_tool', image)
         idx += 1
         if cv2.waitKey() == 27:
             break
@@ -525,6 +526,43 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
                 img = img.transpose([2, 0, 1]) # HWC => CHW
             tfr.add_image(img)
 
+
+#----------------------------------------------------------------------------
+
+def create_from_export(tfrecord_dir, export_dir, shuffle=True):
+    print('Loading images from "%s"' % export_dir)
+
+    import cv2
+
+    def cast_16bit_to_8bit(img):
+        img = float(np.iinfo(np.uint8).max) * img / np.iinfo(np.uint16).max
+        img = img.astype(np.uint8)
+        return img
+
+    image_filenames = []
+    company_dirs = filter(os.path.isdir, [os.path.join(export_dir, d) for d in os.listdir(export_dir)])
+    for company_dir in company_dirs:
+        company_id = os.path.basename(os.path.normpath(company_dir))
+        pass_dirs = filter(os.path.isdir, [os.path.join(company_dir, d) for d in os.listdir(company_dir)])
+        for pass_dir in pass_dirs:
+            pass_id = os.path.basename(os.path.normpath(pass_dir))
+            image_filenames += sorted(glob.glob(os.path.join(pass_dir, '*')))
+
+    if len(image_filenames) == 0:
+        error('No input images found')
+
+    with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
+        order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image_filenames))
+        for idx in range(order.size):
+            img = cv2.imread(image_filenames[order[idx]], cv2.IMREAD_ANYDEPTH)
+            assert img.ndim == 2
+            img = cv2.resize(img, (128, 128))
+            img = np.expand_dims(img, axis=2)
+            img = img.transpose(2, 0, 1) # HWC => CHW
+            img = cast_16bit_to_8bit(img)
+            tfr.add_image(img)
+
+
 #----------------------------------------------------------------------------
 
 def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
@@ -623,6 +661,12 @@ def execute_cmdline(argv):
                                             'create_from_images datasets/mydataset myimagedir')
     p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
     p.add_argument(     'image_dir',        help='Directory containing the images')
+    p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)
+
+    p = add_command(    'create_from_export', 'Create dataset from an export directory.',
+                                            'create_from_images datasets/export myexportdir')
+    p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
+    p.add_argument(     'export_dir',        help='Export directory from Asterix')
     p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)
 
     p = add_command(    'create_from_hdf5', 'Create dataset from legacy HDF5 archive.',
