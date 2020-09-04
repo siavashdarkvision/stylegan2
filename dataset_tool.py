@@ -557,7 +557,7 @@ def create_from_export(tfrecord_dir, export_dir, shuffle=True):
             img = cv2.imread(image_filenames[order[idx]], cv2.IMREAD_ANYDEPTH)
             assert img.ndim == 2
             img = cv2.resize(img, (128, 128))
-            img = np.expand_dims(img, axis=2)
+            img = np.dstack((img, img, img))
             img = img.transpose(2, 0, 1) # HWC => CHW
             img = cast_16bit_to_8bit(img)
             tfr.add_image(img)
