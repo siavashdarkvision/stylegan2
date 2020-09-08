@@ -100,6 +100,7 @@ class SubmitConfig(util.EasyDict):
         self.nvprof = False
         self.local = internal.local.TargetOptions()
         self.datasets = []
+        self.return_value = None
 
         # (automatically populated)
         self.run_id = None
@@ -267,6 +268,7 @@ def run_wrapper(submit_config: SubmitConfig) -> None:
     dnnlib.submit_config = submit_config
 
     exit_with_errcode = False
+    return_value = None
     try:
         print("dnnlib: Running {0}() on {1}...".format(submit_config.run_func_name, submit_config.host_name))
         start_time = time.time()
@@ -275,9 +277,9 @@ def run_wrapper(submit_config: SubmitConfig) -> None:
         assert callable(run_func_obj)
         sig = inspect.signature(run_func_obj)
         if 'submit_config' in sig.parameters:
-            run_func_obj(submit_config=submit_config, **submit_config.run_func_kwargs)
+            return_value = run_func_obj(submit_config=submit_config, **submit_config.run_func_kwargs)
         else:
-            run_func_obj(**submit_config.run_func_kwargs)
+            return_value = run_func_obj(**submit_config.run_func_kwargs)
 
         print("dnnlib: Finished {0}() in {1}.".format(submit_config.run_func_name, util.format_time(time.time() - start_time)))
     except:
@@ -303,6 +305,9 @@ def run_wrapper(submit_config: SubmitConfig) -> None:
     # to whatever process that started this script.
     if exit_with_errcode:
         sys.exit(1)
+
+    if return_value:
+        submit_config.return_value = return_value
 
     return submit_config
 
