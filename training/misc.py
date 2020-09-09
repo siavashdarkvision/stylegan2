@@ -13,6 +13,11 @@ import PIL.Image
 import PIL.ImageFont
 import dnnlib
 
+def make_white_square():
+    square = np.zeros((128, 128, 3), dtype=np.uint8)
+    square[64 - 14: 64 + 14, 64 - 14: 64 + 14, ...] = 255
+    return square
+
 #----------------------------------------------------------------------------
 # Convenience wrappers for pickle that are able to load data produced by
 # older versions of the code, and from external URLs.
@@ -56,6 +61,38 @@ def create_image_grid(images, grid_size=None):
         y = (idx // grid_w) * img_h
         grid[..., y : y + img_h, x : x + img_w] = images[idx]
     return grid
+
+def create_texture_grid(images):
+    assert len(images)
+
+    image_width, image_height, n_channels = images[0].shape
+    assert image_width == image_height == 128
+    assert n_channels in (1, 3)
+
+    texture_size = 2048
+    n_images_per_texture = (texture_size * texture_size) // (image_width * image_height)
+    n_textures = len(images) // n_images_per_texture + 1
+    textures = [np.zeros((texture_size, texture_size, n_channels), dtype=np.uint8) for _ in range(n_textures)]
+
+    for image_idx, image in enumerate(images):
+        texture_idx = image_idx // n_images_per_texture
+        texture = textures[texture_idx]
+        image_in_texture_idx = image_idx % n_images_per_texture
+
+        row = image_in_texture_idx // (texture_size // image_width)
+        col = image_in_texture_idx % (texture_size // image_width)
+
+        texture[row * image_width: (row + 1)* image_width,
+            col * image_height: (col + 1) * image_height, ...] = image
+
+    return textures
+
+def save_texture_grid(images, prefix):
+    textures = create_texture_grid(images)
+    for texture_idx, texture in enumerate(textures):
+        filename = prefix + '_{:d}.png'.format(texture_idx)
+        fmt = 'RGB' if texture.ndim == 3 else 'L'
+        PIL.Image.fromarray(texture, fmt).save(filename)
 
 def convert_to_pil_image(image, drange=[0,1]):
     assert image.ndim == 2 or image.ndim == 3
